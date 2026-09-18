@@ -40,3 +40,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# claude code local state
+.claude/
+
+# participant/roster data dumps — never commit real names/emails/phone
+# numbers to this public repo. Import spreadsheets via the admin UI's
+# /admin/import flow (or a one-off script reading from outside the repo),
+# not by dropping the file in the project directory.
+*.xlsx
+*.xls
+*.csv
