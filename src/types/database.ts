@@ -102,6 +102,31 @@ export interface AuditLog {
   created_at: string;
 }
 
+export interface JuryMember {
+  id: string;
+  name: string;
+  email: string;
+  password_hash: string;
+  room_id: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface Evaluation {
+  id: string;
+  team_id: string;
+  jury_id: string;
+  checkpoint_1: number | null;
+  checkpoint_1_remarks: string | null;
+  checkpoint_2: number | null;
+  checkpoint_2_remarks: string | null;
+  final_score: number | null;
+  final_remarks: string | null;
+  is_finalized: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -133,6 +158,17 @@ export interface Database {
         Insert: Partial<AuditLog>;
         Update: Partial<AuditLog>;
       };
+      jury_members: {
+        Row: JuryMember;
+        Insert: Partial<JuryMember>;
+        Update: Partial<JuryMember>;
+      };
+      evaluations: {
+        Row: Evaluation;
+        Insert: Partial<Evaluation>;
+        Update: Partial<Evaluation>;
+      };
     };
   };
 }
+

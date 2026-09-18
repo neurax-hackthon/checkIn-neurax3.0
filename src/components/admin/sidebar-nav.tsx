@@ -12,6 +12,8 @@ const NAV_ITEMS = [
   { href: "/admin/participants", label: "Participants" },
   { href: "/admin/teams", label: "Teams" },
   { href: "/admin/rooms", label: "Rooms & Benches" },
+  { href: "/admin/jury", label: "Jury Members" },
+  { href: "/admin/evaluations", label: "Evaluations" },
   { href: "/admin/import", label: "Import" },
   { href: "/admin/exports", label: "Exports" },
   { href: "/admin/audit", label: "Audit Log" },

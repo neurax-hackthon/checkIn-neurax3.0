@@ -70,6 +70,57 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, redirectTo: "/admin" });
   }
 
+  if (role === "jury") {
+    const supabaseJury = getServiceClient();
+    const cleanInput = normalizedEmail.trim();
+    const withSuffix = cleanInput.endsWith(".cmrtc") ? cleanInput : `${cleanInput}.cmrtc`;
+
+    const { data: juryMember } = await supabaseJury
+      .from("jury_members")
+      .select("id, email, is_active")
+      .or(`email.eq.${cleanInput},email.eq.${withSuffix}`)
+      .maybeSingle();
+
+    if (!juryMember) {
+      return NextResponse.json(
+        { ok: false, error: "Username not found." },
+        { status: 401 }
+      );
+    }
+
+    if (!juryMember.is_active) {
+      return NextResponse.json(
+        { ok: false, error: "Your account has been deactivated. Contact the admin." },
+        { status: 403 }
+      );
+    }
+
+    await setSessionCookie({
+      role: "jury",
+      juryId: juryMember.id,
+      email: juryMember.email,
+    });
+    return NextResponse.json({ ok: true, redirectTo: "/jury" });
+  }
+
+  if (role === "volunteer") {
+    const code = normalizedEmail.trim().toLowerCase();
+    const validCodes = ["volunteer", "neuraxvol", "neuraxvolunteer", "cmrtcvol"];
+    if (!validCodes.includes(code)) {
+      return NextResponse.json(
+        { ok: false, error: "Invalid volunteer passcode." },
+        { status: 401 }
+      );
+    }
+
+    await setSessionCookie({
+      role: "volunteer",
+      volunteerId: "volunteer-scanner",
+      email: "volunteer@neurax.dev",
+    });
+    return NextResponse.json({ ok: true, redirectTo: "/volunteer" });
+  }
+
   // Participant flow: verify the shared password first so a wrong password
   // fails identically whether or not the email exists (mitigates account
   // enumeration), then confirm the participant record.

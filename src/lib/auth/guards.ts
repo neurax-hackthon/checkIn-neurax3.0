@@ -30,3 +30,41 @@ export async function requireParticipantApi(): Promise<
   if (session?.role !== "participant") return null;
   return session;
 }
+
+export async function requireJuryPage() {
+  const session = await getSession();
+  if (session?.role !== "jury") redirect("/login");
+  return session;
+}
+
+export async function requireJuryApi(): Promise<
+  Extract<SessionPayload, { role: "jury" }> | null
+> {
+  const session = await getSession();
+  if (session?.role !== "jury") return null;
+  return session;
+}
+
+export async function requireVolunteerPage() {
+  const session = await getSession();
+  if (session?.role !== "volunteer" && session?.role !== "admin") redirect("/login");
+  return session;
+}
+
+export async function requireVolunteerApi(): Promise<
+  Extract<SessionPayload, { role: "volunteer" }> | null
+> {
+  const session = await getSession();
+  if (session?.role !== "volunteer") return null;
+  return session;
+}
+
+/** Allows either an admin or a volunteer for scanning / check-in operations. */
+export async function requireScannerApi(): Promise<
+  Extract<SessionPayload, { role: "admin" | "volunteer" }> | null
+> {
+  const session = await getSession();
+  if (session?.role !== "admin" && session?.role !== "volunteer") return null;
+  return session;
+}
+

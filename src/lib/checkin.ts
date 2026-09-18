@@ -60,7 +60,7 @@ async function loadTeamRoomBench(teamId: string | null) {
  */
 export async function attemptCheckin(
   participantId: string,
-  adminId: string,
+  adminId: string | null,
   source: "scanner" | "manual"
 ): Promise<CheckinResult> {
   const supabase = getServiceClient();

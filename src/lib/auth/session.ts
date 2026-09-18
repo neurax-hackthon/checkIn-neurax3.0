@@ -8,7 +8,9 @@ const SESSION_TTL_SECONDS = 60 * 60 * 24 * 3; // 3 days — event spans 2 days, 
 
 export type SessionPayload =
   | { role: "admin"; adminId: string; email: string }
-  | { role: "participant"; participantId: string; email: string };
+  | { role: "participant"; participantId: string; email: string }
+  | { role: "jury"; juryId: string; email: string }
+  | { role: "volunteer"; volunteerId: string; email: string };
 
 function getSecretKey() {
   const env = getServerEnv();
@@ -39,6 +41,20 @@ export async function verifySessionToken(
       return {
         role: "participant",
         participantId: String(payload.participantId),
+        email: String(payload.email),
+      };
+    }
+    if (payload.role === "jury") {
+      return {
+        role: "jury",
+        juryId: String(payload.juryId),
+        email: String(payload.email),
+      };
+    }
+    if (payload.role === "volunteer") {
+      return {
+        role: "volunteer",
+        volunteerId: String(payload.volunteerId),
         email: String(payload.email),
       };
     }

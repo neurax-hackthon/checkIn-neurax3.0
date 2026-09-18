@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdminApi } from "@/lib/auth/guards";
+import { requireScannerApi } from "@/lib/auth/guards";
 import { checkinSchema } from "@/lib/validation/checkin";
 import { hashQrToken, isWellFormedQrToken } from "@/lib/qr/token";
 import { getServiceClient } from "@/lib/db/server";
@@ -8,10 +8,12 @@ import { checkRateLimit } from "@/lib/auth/rate-limit";
 import { getClientIp } from "@/lib/http";
 
 export async function POST(req: NextRequest) {
-  const admin = await requireAdminApi();
-  if (!admin) {
+  const scanner = await requireScannerApi();
+  if (!scanner) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
+
+  const adminId = scanner.role === "admin" ? scanner.adminId : null;
 
   const rl = checkRateLimit(`checkin:${getClientIp(req)}`, 120, 60_000);
   if (!rl.allowed) {
@@ -56,6 +58,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, result: "invalid_pass" });
   }
 
-  const outcome = await attemptCheckin(participantId, admin.adminId, source);
+  const outcome = await attemptCheckin(participantId, adminId, source);
   return NextResponse.json({ ok: true, ...outcome });
 }
