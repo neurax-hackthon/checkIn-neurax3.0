@@ -83,15 +83,8 @@ export function BenchGrid({
                 >
                   <p className="mono text-[10px] text-muted">{cell.label}</p>
                   <p className="font-medium truncate">{cell.team ? cell.team.code : "Empty"}</p>
-                  {cell.team && (
-                    <p className="truncate text-[10px] text-muted">
-                      {cell.team.name || "No name"}
-                    </p>
-                  )}
-                  {cell.team && (
-                    <p className="truncate text-[9px] text-muted/60 mono" title={cell.team.id}>
-                      ID: {cell.team.id.slice(0, 8)}…
-                    </p>
+                  {cell.team?.name && (
+                    <p className="truncate text-[10px] text-muted">{cell.team.name}</p>
                   )}
                 </button>
               );
