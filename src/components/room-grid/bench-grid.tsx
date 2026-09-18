@@ -64,7 +64,7 @@ export function BenchGrid({
       <div className="overflow-x-auto rounded-xl border border-border bg-surface p-3">
         <div
           className="inline-grid gap-1.5"
-          style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(76px, 1fr))` }}
+          style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(96px, 1fr))` }}
         >
           {Array.from({ length: rowCount }).map((_, rIdx) =>
             Array.from({ length: columnCount }).map((_, cIdx) => {
@@ -83,6 +83,16 @@ export function BenchGrid({
                 >
                   <p className="mono text-[10px] text-muted">{cell.label}</p>
                   <p className="font-medium truncate">{cell.team ? cell.team.code : "Empty"}</p>
+                  {cell.team && (
+                    <p className="truncate text-[10px] text-muted">
+                      {cell.team.name || "No name"}
+                    </p>
+                  )}
+                  {cell.team && (
+                    <p className="truncate text-[9px] text-muted/60 mono" title={cell.team.id}>
+                      ID: {cell.team.id.slice(0, 8)}…
+                    </p>
+                  )}
                 </button>
               );
             })
