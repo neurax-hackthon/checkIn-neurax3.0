@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { getServiceClient } from "@/lib/db/server";
 import { BenchGrid, BenchCell } from "@/components/room-grid/bench-grid";
+import { EditRoomForm } from "@/components/admin/edit-room-form";
+import { DeleteRoomButton } from "@/components/admin/delete-room-button";
+import { Badge } from "@/components/ui/badge";
 
 interface BenchRow { id: string; row_number: number; column_number: number; label: string }
 interface TeamRow { id: string; team_code: string; team_name: string | null; bench_id: string | null }
@@ -22,7 +25,7 @@ export default async function RoomDetailPage({
 
   const { data: room } = await supabase
     .from("rooms")
-    .select("id, room_code, display_name, row_count, column_count")
+    .select("id, room_code, display_name, building, floor, row_count, column_count, is_active")
     .eq("id", id)
     .maybeSingle();
 
@@ -83,9 +86,23 @@ export default async function RoomDetailPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold mono">{room.room_code}</h1>
-        <p className="text-sm text-muted">{room.display_name}</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold mono">{room.room_code}</h1>
+            <Badge tone={room.is_active ? "success" : "neutral"}>{room.is_active ? "Active" : "Inactive"}</Badge>
+          </div>
+          <p className="text-sm text-muted">{room.display_name}</p>
+          <p className="text-xs text-muted mt-1">
+            {room.row_count} rows × {room.column_count} columns
+            {room.building ? ` · ${room.building}` : ""}
+            {room.floor ? ` · Floor ${room.floor}` : ""}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-start gap-2">
+          <EditRoomForm room={room} />
+          <DeleteRoomButton roomId={room.id} roomCode={room.room_code} teamsAssigned={(teams ?? []).length} />
+        </div>
       </div>
 
       <BenchGrid

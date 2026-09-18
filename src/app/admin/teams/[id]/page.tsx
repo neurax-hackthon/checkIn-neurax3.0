@@ -2,8 +2,10 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getServiceClient } from "@/lib/db/server";
 import { deriveTeamStatus } from "@/lib/team-status";
+import { getRoomsWithBenchAvailability } from "@/lib/rooms-data";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { AssignSeatForm } from "@/components/admin/assign-seat-form";
 import type { EntryStatus, ParticipantStatus, TeamStatus } from "@/types/database";
 
 const STATUS_TONE: Record<TeamStatus, "neutral" | "warning" | "success"> = {
@@ -38,7 +40,7 @@ export default async function TeamDetailPage({
     checked_in_at: string | null;
   }
 
-  const [roomRes, benchRes, membersRes] = await Promise.all([
+  const [roomRes, benchRes, membersRes, rooms] = await Promise.all([
     team.room_id
       ? supabase.from("rooms").select("room_code, display_name").eq("id", team.room_id).maybeSingle()
       : Promise.resolve({ data: null }),
@@ -50,6 +52,7 @@ export default async function TeamDetailPage({
       .select("id, name, email, is_team_leader, status, entry_status, checked_in_at")
       .eq("team_id", id)
       .order("name"),
+    getRoomsWithBenchAvailability(),
   ]);
   const room = roomRes.data as { room_code: string; display_name: string } | null;
   const bench = benchRes.data as { label: string; row_number: number; column_number: number } | null;
@@ -89,6 +92,21 @@ export default async function TeamDetailPage({
           </CardBody>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Room &amp; Bench Assignment</CardTitle>
+        </CardHeader>
+        <CardBody>
+          <AssignSeatForm
+            teamId={team.id}
+            currentRoomId={team.room_id}
+            currentBenchId={team.bench_id}
+            rooms={rooms}
+            variant="full"
+          />
+        </CardBody>
+      </Card>
 
       <Card>
         <CardHeader>
