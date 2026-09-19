@@ -5,6 +5,7 @@ import { requireJuryPage } from "@/lib/auth/guards";
 import { requireAdminPage } from "@/lib/auth/guards";
 import { getServiceClient } from "@/lib/db/server";
 import { getActiveCheckpoint, CHECKPOINT_CONFIG, type CheckpointNumber } from "@/lib/evaluations-data";
+import { CP3_ROTATION } from "@/lib/cp3-rotation";
 
 // ---------------------------------------------------------------------------
 // Jury: submit score for active checkpoint (one-shot, immutable)
@@ -121,6 +122,38 @@ export async function updateActiveCheckpoint(checkpoint: CheckpointNumber) {
   await requireAdminPage();
   const supabase = getServiceClient();
 
+  // ── Auto-apply CP3 team rotation when switching to Final Evaluation ──────
+  if (checkpoint === 3) {
+    console.log("[checkpoint] Applying CP3 team rotation...");
+    for (const item of CP3_ROTATION) {
+      // Remove current assignments for this faculty
+      const { error: delErr } = await supabase
+        .from("jury_team_assignments")
+        .delete()
+        .eq("jury_id", item.juryId);
+
+      if (delErr) {
+        console.error(`[cp3-rotation] DELETE failed for ${item.juryName}:`, delErr);
+        return { ok: false, error: `Failed to rotate teams for ${item.juryName}.` };
+      }
+
+      // Insert rotated CP3 assignments
+      if (item.teamIds.length > 0) {
+        const { error: insErr } = await supabase
+          .from("jury_team_assignments")
+          .insert(item.teamIds.map((tid) => ({ jury_id: item.juryId, team_id: tid })));
+
+        if (insErr) {
+          console.error(`[cp3-rotation] INSERT failed for ${item.juryName}:`, insErr);
+          return { ok: false, error: `Failed to assign rotated teams for ${item.juryName}.` };
+        }
+      }
+
+      console.log(`[cp3-rotation] ✓ ${item.juryName} → ${item.teamIds.length} teams`);
+    }
+    console.log("[checkpoint] CP3 rotation complete.");
+  }
+
   // Try updating the singleton row first
   const { data, error } = await supabase
     .from("event_settings")
@@ -147,5 +180,6 @@ export async function updateActiveCheckpoint(checkpoint: CheckpointNumber) {
 
   revalidatePath("/jury");
   revalidatePath("/admin/evaluations");
+  revalidatePath("/admin/jury");
   return { ok: true };
 }
