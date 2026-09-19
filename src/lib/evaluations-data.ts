@@ -47,6 +47,9 @@ export interface JuryTeamRow {
   teamCode: string;
   teamName: string | null;
   benchLabel: string | null;
+  roomCode: string | null;
+  benchRow: number | null;
+  benchColumn: number | null;
   /** Score for the active checkpoint only (null = not yet submitted) */
   activeScore: number | null;
   /** Whether this jury member already submitted for the active checkpoint */
@@ -76,14 +79,26 @@ export async function getAllTeamsForJury(
 
   if (!teams?.length) return [];
 
-  // Get bench labels
+  // Get bench details (label, row, column, room_id)
   const benchIds = teams.map((t) => t.bench_id).filter(Boolean) as string[];
   const { data: benches } = benchIds.length
-    ? (await supabase.from("benches").select("id, label").in("id", benchIds)) as {
-        data: Array<{ id: string; label: string }> | null;
+    ? (await supabase
+        .from("benches")
+        .select("id, label, row_number, column_number, room_id")
+        .in("id", benchIds)) as {
+        data: Array<{ id: string; label: string; row_number: number; column_number: number; room_id: string }> | null;
       }
-    : { data: [] as Array<{ id: string; label: string }> };
-  const benchMap = new Map((benches ?? []).map((b) => [b.id, b.label]));
+    : { data: [] as Array<{ id: string; label: string; row_number: number; column_number: number; room_id: string }> };
+  const benchMap = new Map((benches ?? []).map((b) => [b.id, b]));
+
+  // Get room codes
+  const roomIds = [...new Set((benches ?? []).map((b) => b.room_id).filter(Boolean))] as string[];
+  const { data: rooms } = roomIds.length
+    ? (await supabase.from("rooms").select("id, room_code").in("id", roomIds)) as {
+        data: Array<{ id: string; room_code: string }> | null;
+      }
+    : { data: [] as Array<{ id: string; room_code: string }> };
+  const roomMap = new Map((rooms ?? []).map((r) => [r.id, r.room_code]));
 
   // Get evaluations for this jury (only need the active checkpoint column)
   const teamIds = teams.map((t) => t.id);
@@ -117,11 +132,16 @@ export async function getAllTeamsForJury(
   return teams.map((t) => {
     const score = evalMap.get(t.id) ?? null;
     const presence = presenceMap.get(t.id) ?? { total: 0, checkedIn: 0 };
+    const bench = t.bench_id ? benchMap.get(t.bench_id) ?? null : null;
+    const roomCode = bench ? roomMap.get(bench.room_id) ?? null : null;
     return {
       teamId: t.id,
       teamCode: t.team_code,
       teamName: t.team_name,
-      benchLabel: t.bench_id ? benchMap.get(t.bench_id) ?? null : null,
+      benchLabel: bench?.label ?? null,
+      roomCode,
+      benchRow: bench?.row_number ?? null,
+      benchColumn: bench?.column_number ?? null,
       activeScore: score,
       isSubmitted: score !== null,
       isPresent: presence.checkedIn > 0,

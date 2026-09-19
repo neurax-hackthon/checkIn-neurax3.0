@@ -11,6 +11,9 @@ interface JuryTeamRow {
   teamCode: string;
   teamName: string | null;
   benchLabel: string | null;
+  roomCode: string | null;
+  benchRow: number | null;
+  benchColumn: number | null;
   activeScore: number | null;
   isSubmitted: boolean;
   isPresent: boolean;
@@ -131,8 +134,28 @@ export function JuryTeamList({ teams, activeCheckpoint, checkpointLabel, maxScor
                       : team.totalMembers > 0
                       ? `0/${team.totalMembers} — not present`
                       : "No members"}
-                    {team.benchLabel ? ` · Bench: ${team.benchLabel}` : ""}
                   </p>
+                  {/* Location badge */}
+                  {(team.roomCode || team.benchRow != null) && (
+                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                      <span className="text-[10px]">📍</span>
+                      {team.roomCode && (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gold/10 text-gold border border-gold/20">
+                          Room {team.roomCode}
+                        </span>
+                      )}
+                      {team.benchRow != null && team.benchColumn != null && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-surface-raised border border-border text-muted">
+                          Row {team.benchRow} · Col {team.benchColumn}
+                        </span>
+                      )}
+                      {team.benchLabel && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-surface-raised border border-border text-muted">
+                          Bench {team.benchLabel}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <Badge tone={team.isSubmitted ? "success" : "neutral"}>
                   {team.isSubmitted ? "✓ Done" : "Pending"}
