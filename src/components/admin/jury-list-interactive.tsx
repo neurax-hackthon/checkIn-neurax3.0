@@ -17,8 +17,6 @@ export interface JuryTeamDetail {
   finalScore: number | null;
   total: number;
   isFinalized: boolean;
-  /** false = this team is only here because of a historical evaluation (e.g. CP1 after rotation) */
-  isCurrentlyAssigned: boolean;
 }
 
 export interface JuryMemberItem {

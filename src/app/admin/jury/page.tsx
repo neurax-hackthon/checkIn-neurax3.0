@@ -57,54 +57,49 @@ export default async function AdminJuryPage() {
   const benchMap = new Map((allBenches ?? []).map((b) => [b.id, b.label]));
   const teamMap = new Map((allTeams ?? []).map((t) => [t.id, t]));
 
-  // Index evaluations by "jury_id:team_id"
+  // Index evaluations by "jury_id:team_id" — used for CP2/Final lookup per faculty
   const evalMap = new Map<string, { checkpoint_1: number | null; checkpoint_2: number | null; final_score: number | null; is_finalized: boolean }>();
   for (const e of allEvals ?? []) {
     evalMap.set(`${e.jury_id}:${e.team_id}`, e);
   }
 
-  // Index assignments by jury_id (current round assignments)
-  const assignmentsByJury = new Map<string, Set<string>>();
-  for (const a of allAssignments ?? []) {
-    const set = assignmentsByJury.get(a.jury_id) ?? new Set<string>();
-    set.add(a.team_id);
-    assignmentsByJury.set(a.jury_id, set);
+  // Team-level CP1 score map (team_id → cp1 score, from ANY jury member).
+  // After team rotation the faculty evaluating in CP2 is different from CP1,
+  // so we look up the CP1 score by team, not by jury+team.
+  const teamCP1Map = new Map<string, number>();
+  for (const e of allEvals ?? []) {
+    if (e.checkpoint_1 !== null) {
+      teamCP1Map.set(e.team_id, e.checkpoint_1);
+    }
   }
 
-  // Index historical team IDs per jury from the evaluations table
-  // This ensures CP1 teams (rotated away) remain visible in the admin view
-  const historicalTeamsByJury = new Map<string, Set<string>>();
-  for (const e of allEvals ?? []) {
-    const set = historicalTeamsByJury.get(e.jury_id) ?? new Set<string>();
-    set.add(e.team_id);
-    historicalTeamsByJury.set(e.jury_id, set);
+  // Index current assignments by jury_id
+  const assignmentsByJury = new Map<string, string[]>();
+  for (const a of allAssignments ?? []) {
+    const list = assignmentsByJury.get(a.jury_id) ?? [];
+    list.push(a.team_id);
+    assignmentsByJury.set(a.jury_id, list);
   }
 
   // Build interactive jury items
   const interactiveJury: JuryMemberItem[] = (juryMembers ?? []).map((j) => {
-    const assignedSet = assignmentsByJury.get(j.id) ?? new Set<string>();
-    const historicalSet = historicalTeamsByJury.get(j.id) ?? new Set<string>();
+    let assignedTeamIds = assignmentsByJury.get(j.id) ?? [];
 
-    // Fallback: if no direct assignments use room teams
-    if (assignedSet.size === 0 && j.room_id) {
-      (allTeams ?? [])
-        .filter((t) => t.room_id === j.room_id)
-        .forEach((t) => assignedSet.add(t.id));
+    // Fallback to room teams if no direct assignment
+    if (assignedTeamIds.length === 0 && j.room_id) {
+      assignedTeamIds = (allTeams ?? []).filter((t) => t.room_id === j.room_id).map((t) => t.id);
     }
 
-    // Union of current assignments + historically evaluated teams (e.g. CP1 teams after rotation)
-    const allTeamIds = new Set([...assignedSet, ...historicalSet]);
-
-    const teams: JuryTeamDetail[] = [...allTeamIds]
+    const teams: JuryTeamDetail[] = assignedTeamIds
       .map((tid) => teamMap.get(tid))
       .filter((t): t is NonNullable<typeof t> => !!t)
       .map((t) => {
         const ev = evalMap.get(`${j.id}:${t.id}`);
-        const cp1 = ev?.checkpoint_1 ?? null;
+        // CP1: look up by team_id across all evaluations (whoever evaluated in round 1)
+        const cp1 = teamCP1Map.get(t.id) ?? null;
+        // CP2 & Final: this faculty member's own submission for this team
         const cp2 = ev?.checkpoint_2 ?? null;
         const fs = ev?.final_score ?? null;
-        // Mark whether this team is in the current (active round) assignments
-        const isCurrentlyAssigned = assignedSet.has(t.id);
         return {
           teamId: t.id,
           teamCode: t.team_code,
@@ -116,7 +111,6 @@ export default async function AdminJuryPage() {
           finalScore: fs,
           total: (cp1 ?? 0) + (cp2 ?? 0) + (fs ?? 0),
           isFinalized: ev?.is_finalized ?? false,
-          isCurrentlyAssigned,
         };
       })
       .sort((a, b) => a.teamCode.localeCompare(b.teamCode));
