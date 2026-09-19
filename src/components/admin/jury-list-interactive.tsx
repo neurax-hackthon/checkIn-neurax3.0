@@ -38,9 +38,11 @@ export interface TeamOption {
 export function JuryListInteractive({
   juryMembers,
   allTeams,
+  activeCheckpoint,
 }: {
   juryMembers: JuryMemberItem[];
   allTeams: TeamOption[];
+  activeCheckpoint: 1 | 2 | 3;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedTeamToAdd, setSelectedTeamToAdd] = useState<string>("");
@@ -86,9 +88,11 @@ export function JuryListInteractive({
       {juryMembers.map((j) => {
         const isExpanded = expandedId === j.id;
         const finalizedCount = j.teams.filter((t) => t.isFinalized).length;
-        const evaluatedCount = j.teams.filter(
-          (t) => t.checkpoint1 !== null || t.checkpoint2 !== null || t.finalScore !== null
-        ).length;
+        const evaluatedCount = j.teams.filter((t) => {
+          if (activeCheckpoint === 1) return t.checkpoint1 !== null;
+          if (activeCheckpoint === 2) return t.checkpoint2 !== null;
+          return t.finalScore !== null;
+        }).length;
 
         // Find teams not yet assigned to this jury member
         const assignedTeamIds = new Set(j.teams.map((t) => t.teamId));
@@ -124,7 +128,7 @@ export function JuryListInteractive({
                     {j.teams.length} teams assigned
                   </span>
                   <span>·</span>
-                  <span>{evaluatedCount}/{j.teams.length} evaluated</span>
+                  <span>{evaluatedCount}/{j.teams.length} evaluated (CP{activeCheckpoint})</span>
                   {j.roomName && (
                     <>
                       <span>·</span>

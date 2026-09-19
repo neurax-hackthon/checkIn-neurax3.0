@@ -1,4 +1,5 @@
 import { getServiceClient } from "@/lib/db/server";
+import { getActiveCheckpoint } from "@/lib/evaluations-data";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { CreateJuryForm } from "@/components/admin/create-jury-form";
 import { JuryListInteractive, JuryMemberItem, JuryTeamDetail, TeamOption } from "@/components/admin/jury-list-interactive";
@@ -13,6 +14,7 @@ export default async function AdminJuryPage() {
     evalsRes,
     roomsRes,
     benchesRes,
+    activeCP,
   ] = await Promise.all([
     supabase.from("jury_members").select("id, name, email, room_id, is_active, created_at").order("name"),
     supabase.from("jury_team_assignments").select("jury_id, team_id"),
@@ -20,6 +22,7 @@ export default async function AdminJuryPage() {
     supabase.from("evaluations").select("jury_id, team_id, checkpoint_1, checkpoint_2, final_score, is_finalized"),
     supabase.from("rooms").select("id, room_code, display_name").order("room_code"),
     supabase.from("benches").select("id, label"),
+    getActiveCheckpoint(),
   ]);
 
   const juryMembers = (juryRes.data ?? []) as Array<{
@@ -135,7 +138,7 @@ export default async function AdminJuryPage() {
           <CardTitle>All Jury Members ({interactiveJury.length})</CardTitle>
         </CardHeader>
         <CardBody>
-          <JuryListInteractive juryMembers={interactiveJury} allTeams={teamOptions} />
+          <JuryListInteractive juryMembers={interactiveJury} allTeams={teamOptions} activeCheckpoint={activeCP} />
         </CardBody>
       </Card>
     </div>
