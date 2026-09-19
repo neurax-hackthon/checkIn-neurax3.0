@@ -121,11 +121,29 @@ export async function updateActiveCheckpoint(checkpoint: CheckpointNumber) {
   await requireAdminPage();
   const supabase = getServiceClient();
 
-  const { error } = await supabase
+  // Try updating the singleton row first
+  const { data, error } = await supabase
     .from("event_settings")
-    .upsert({ id: 1, active_checkpoint: checkpoint, updated_at: new Date().toISOString() });
+    .update({ active_checkpoint: checkpoint, updated_at: new Date().toISOString() })
+    .eq("id", 1)
+    .select("id")
+    .maybeSingle();
 
-  if (error) return { ok: false, error: "Failed to update checkpoint." };
+  if (error) {
+    console.error("[checkpoint] update error:", error);
+    return { ok: false, error: "Failed to update checkpoint." };
+  }
+
+  // Row didn't exist yet — insert it
+  if (!data) {
+    const { error: insertError } = await supabase
+      .from("event_settings")
+      .insert({ id: 1, active_checkpoint: checkpoint });
+    if (insertError) {
+      console.error("[checkpoint] insert error:", insertError);
+      return { ok: false, error: "Failed to update checkpoint." };
+    }
+  }
 
   revalidatePath("/jury");
   revalidatePath("/admin/evaluations");

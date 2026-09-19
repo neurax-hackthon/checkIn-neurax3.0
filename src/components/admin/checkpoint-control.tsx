@@ -27,7 +27,7 @@ export function CheckpointControl({ current }: CheckpointControlProps) {
     startTransition(async () => {
       const res = await updateActiveCheckpoint(target);
       if (!res.ok) {
-        setError(res.error ?? "Failed to update.");
+        setError(res.error ?? "Failed to update checkpoint. Check server logs.");
       } else {
         setConfirmTarget(null);
         router.refresh();
