@@ -190,6 +190,7 @@ export async function getEvaluation(teamId: string, juryId: string) {
 interface EvalRow {
   teamCode: string;
   teamName: string | null;
+  theme: string | null;
   roomCode: string | null;
   juryName: string;
   juryId: string;
@@ -226,9 +227,9 @@ export async function getAllEvaluations(): Promise<EvalRow[]> {
 
   const { data: teams } = (await supabase
     .from("teams")
-    .select("id, team_code, team_name, room_id")
+    .select("id, team_code, team_name, theme, room_id")
     .in("id", teamIds)) as {
-    data: Array<{ id: string; team_code: string; team_name: string | null; room_id: string | null }> | null;
+    data: Array<{ id: string; team_code: string; team_name: string | null; theme: string | null; room_id: string | null }> | null;
   };
   const teamMap = new Map((teams ?? []).map((t) => [t.id, t]));
 
@@ -254,6 +255,7 @@ export async function getAllEvaluations(): Promise<EvalRow[]> {
       juryId: e.jury_id,
       teamCode: team?.team_code ?? "—",
       teamName: team?.team_name ?? null,
+      theme: team?.theme ?? null,
       roomCode: team?.room_id ? roomMap.get(team.room_id) ?? null : null,
       juryName: juryMap.get(e.jury_id) ?? "—",
       checkpoint1: e.checkpoint_1,
