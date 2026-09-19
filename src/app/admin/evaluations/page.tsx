@@ -1,18 +1,37 @@
-import { getAllEvaluations, getEvaluationStats } from "@/lib/evaluations-data";
+import { getAllEvaluations, getEvaluationStats, getActiveCheckpoint } from "@/lib/evaluations-data";
 import { KpiCard } from "@/components/admin/kpi-card";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { ExportEvaluationsButton } from "@/components/admin/export-evaluations-button";
+import { CheckpointControl } from "@/components/admin/checkpoint-control";
+import { EvaluationTable } from "@/components/admin/evaluation-table";
 
 export default async function AdminEvaluationsPage() {
-  const [stats, evaluations] = await Promise.all([getEvaluationStats(), getAllEvaluations()]);
+  const [stats, evaluations, activeCP] = await Promise.all([
+    getEvaluationStats(),
+    getAllEvaluations(),
+    getActiveCheckpoint(),
+  ]);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-xl font-semibold">Evaluations & Mark Sheets</h1>
+        <h1 className="text-xl font-semibold">Evaluations &amp; Mark Sheets</h1>
         <ExportEvaluationsButton />
       </div>
+
+      {/* Checkpoint Control */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Active Checkpoint Control</CardTitle>
+        </CardHeader>
+        <CardBody>
+          <p className="text-sm text-muted mb-3">
+            Select the checkpoint that jury members can currently evaluate. Jury members will only see
+            and score the active checkpoint — previous scores are hidden from them.
+          </p>
+          <CheckpointControl current={activeCP} />
+        </CardBody>
+      </Card>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         <KpiCard label="Total Evaluated" value={stats.totalEvaluated} />
@@ -28,47 +47,10 @@ export default async function AdminEvaluationsPage() {
           <CardTitle>Leaderboard — All Teams</CardTitle>
         </CardHeader>
         <CardBody className="overflow-x-auto">
-          {evaluations.length === 0 ? (
-            <p className="text-sm text-muted py-4">No evaluations yet.</p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs text-muted uppercase tracking-wide">
-                  <th className="py-2 pr-3 w-10">#</th>
-                  <th className="py-2 pr-3">Team</th>
-                  <th className="py-2 pr-3 hidden sm:table-cell">Room</th>
-                  <th className="py-2 pr-3 hidden md:table-cell">Jury</th>
-                  <th className="py-2 pr-3 text-center">CP1<br /><span className="text-[10px] normal-case">/15</span></th>
-                  <th className="py-2 pr-3 text-center">CP2<br /><span className="text-[10px] normal-case">/25</span></th>
-                  <th className="py-2 pr-3 text-center">Final<br /><span className="text-[10px] normal-case">/60</span></th>
-                  <th className="py-2 pr-3 text-center">Total<br /><span className="text-[10px] normal-case">/100</span></th>
-                  <th className="py-2 text-center">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {evaluations.map((ev, idx) => (
-                  <tr key={`${ev.teamCode}-${ev.juryName}`} className="border-b border-border/50 hover:bg-surface-raised/50">
-                    <td className="py-2.5 pr-3 mono text-muted">{idx + 1}</td>
-                    <td className="py-2.5 pr-3">
-                      <p className="font-medium mono text-sm">{ev.teamCode}</p>
-                      {ev.teamName && <p className="text-xs text-muted truncate max-w-[150px]">{ev.teamName}</p>}
-                    </td>
-                    <td className="py-2.5 pr-3 text-xs text-muted hidden sm:table-cell">{ev.roomCode ?? "—"}</td>
-                    <td className="py-2.5 pr-3 text-xs text-muted hidden md:table-cell">{ev.juryName}</td>
-                    <td className="py-2.5 pr-3 text-center mono">{ev.checkpoint1 ?? "—"}</td>
-                    <td className="py-2.5 pr-3 text-center mono">{ev.checkpoint2 ?? "—"}</td>
-                    <td className="py-2.5 pr-3 text-center mono">{ev.finalScore ?? "—"}</td>
-                    <td className="py-2.5 pr-3 text-center font-bold mono text-gold">{ev.total}</td>
-                    <td className="py-2.5 text-center">
-                      <Badge tone={ev.isFinalized ? "success" : "neutral"}>
-                        {ev.isFinalized ? "Final" : "Draft"}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          <p className="text-xs text-muted mb-3">
+            Click on any score to edit it. Only admin can modify submitted scores.
+          </p>
+          <EvaluationTable evaluations={evaluations} />
         </CardBody>
       </Card>
 

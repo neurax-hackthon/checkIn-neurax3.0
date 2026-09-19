@@ -2,72 +2,70 @@
 
 import { revalidatePath } from "next/cache";
 import { requireJuryPage } from "@/lib/auth/guards";
+import { requireAdminPage } from "@/lib/auth/guards";
 import { getServiceClient } from "@/lib/db/server";
+import { getActiveCheckpoint, CHECKPOINT_CONFIG, type CheckpointNumber } from "@/lib/evaluations-data";
 
-interface SaveEvaluationInput {
+// ---------------------------------------------------------------------------
+// Jury: submit score for active checkpoint (one-shot, immutable)
+// ---------------------------------------------------------------------------
+
+interface SubmitCheckpointInput {
   teamId: string;
-  checkpoint1: number | null;
-  checkpoint1Remarks: string | null;
-  checkpoint2: number | null;
-  checkpoint2Remarks: string | null;
-  finalScore: number | null;
-  finalRemarks: string | null;
+  score: number;
+  remarks: string | null;
 }
 
-export async function saveEvaluation(input: SaveEvaluationInput) {
+export async function submitCheckpointScore(input: SubmitCheckpointInput) {
   const session = await requireJuryPage();
   const juryId = session.juryId;
   const supabase = getServiceClient();
 
-  // Validate scores
-  if (input.checkpoint1 !== null && (input.checkpoint1 < 0 || input.checkpoint1 > 15)) {
-    return { ok: false, error: "Checkpoint 1 must be between 0 and 15." };
-  }
-  if (input.checkpoint2 !== null && (input.checkpoint2 < 0 || input.checkpoint2 > 25)) {
-    return { ok: false, error: "Checkpoint 2 must be between 0 and 25." };
-  }
-  if (input.finalScore !== null && (input.finalScore < 0 || input.finalScore > 60)) {
-    return { ok: false, error: "Final score must be between 0 and 60." };
+  // Read active checkpoint
+  const activeCP = await getActiveCheckpoint();
+  const config = CHECKPOINT_CONFIG[activeCP];
+
+  // Validate score range
+  if (input.score < 0 || input.score > config.maxScore) {
+    return { ok: false, error: `Score must be between 0 and ${config.maxScore}.` };
   }
 
-  // Check if already finalized
-  const { data: existing } = await supabase
+  // Check if this jury member already has an evaluation row for this team
+  const { data: existing } = (await supabase
     .from("evaluations")
-    .select("id, is_finalized")
+    .select(`id, ${config.dbScoreCol}`)
     .eq("team_id", input.teamId)
     .eq("jury_id", juryId)
-    .maybeSingle();
+    .maybeSingle()) as { data: Record<string, unknown> | null };
 
-  if (existing?.is_finalized) {
-    return { ok: false, error: "This evaluation has been finalized and cannot be edited." };
+  // Immutability check: if score already exists, reject
+  if (existing && existing[config.dbScoreCol] !== null) {
+    return {
+      ok: false,
+      error: "Score already submitted for this checkpoint. Contact admin to modify.",
+    };
   }
 
   const now = new Date().toISOString();
 
   if (existing) {
+    // Update only the active checkpoint columns
     const { error } = await supabase
       .from("evaluations")
       .update({
-        checkpoint_1: input.checkpoint1,
-        checkpoint_1_remarks: input.checkpoint1Remarks,
-        checkpoint_2: input.checkpoint2,
-        checkpoint_2_remarks: input.checkpoint2Remarks,
-        final_score: input.finalScore,
-        final_remarks: input.finalRemarks,
+        [config.dbScoreCol]: input.score,
+        [config.dbRemarksCol]: input.remarks,
         updated_at: now,
       })
-      .eq("id", existing.id);
+      .eq("id", existing.id as string);
     if (error) return { ok: false, error: "Failed to save evaluation." };
   } else {
+    // Insert new row with only the active checkpoint column
     const { error } = await supabase.from("evaluations").insert({
       team_id: input.teamId,
       jury_id: juryId,
-      checkpoint_1: input.checkpoint1,
-      checkpoint_1_remarks: input.checkpoint1Remarks,
-      checkpoint_2: input.checkpoint2,
-      checkpoint_2_remarks: input.checkpoint2Remarks,
-      final_score: input.finalScore,
-      final_remarks: input.finalRemarks,
+      [config.dbScoreCol]: input.score,
+      [config.dbRemarksCol]: input.remarks,
       created_at: now,
       updated_at: now,
     });
@@ -78,36 +76,56 @@ export async function saveEvaluation(input: SaveEvaluationInput) {
   return { ok: true };
 }
 
-export async function finalizeEvaluation(teamId: string) {
-  const session = await requireJuryPage();
-  const juryId = session.juryId;
+// ---------------------------------------------------------------------------
+// Admin: edit any evaluation score (the only way to modify submitted scores)
+// ---------------------------------------------------------------------------
+
+interface AdminEditInput {
+  evalId: string;
+  checkpoint: CheckpointNumber;
+  score: number;
+  remarks: string | null;
+}
+
+export async function adminEditEvaluation(input: AdminEditInput) {
+  await requireAdminPage();
   const supabase = getServiceClient();
+  const config = CHECKPOINT_CONFIG[input.checkpoint];
 
-  const { data: evaluation } = await supabase
-    .from("evaluations")
-    .select("id, checkpoint_1, checkpoint_2, final_score, is_finalized")
-    .eq("team_id", teamId)
-    .eq("jury_id", juryId)
-    .maybeSingle();
-
-  if (!evaluation) {
-    return { ok: false, error: "No evaluation found. Please save scores first." };
-  }
-
-  if (evaluation.is_finalized) {
-    return { ok: false, error: "Already finalized." };
-  }
-
-  if (evaluation.checkpoint_1 === null || evaluation.checkpoint_2 === null || evaluation.final_score === null) {
-    return { ok: false, error: "All three checkpoints must be scored before finalizing." };
+  // Validate score range
+  if (input.score < 0 || input.score > config.maxScore) {
+    return { ok: false, error: `Score must be between 0 and ${config.maxScore}.` };
   }
 
   const { error } = await supabase
     .from("evaluations")
-    .update({ is_finalized: true, updated_at: new Date().toISOString() })
-    .eq("id", evaluation.id);
+    .update({
+      [config.dbScoreCol]: input.score,
+      [config.dbRemarksCol]: input.remarks,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.evalId);
 
-  if (error) return { ok: false, error: "Failed to finalize." };
+  if (error) return { ok: false, error: "Failed to update evaluation." };
+
+  revalidatePath("/admin/evaluations");
+  revalidatePath("/jury");
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Admin: set active checkpoint
+// ---------------------------------------------------------------------------
+
+export async function updateActiveCheckpoint(checkpoint: CheckpointNumber) {
+  await requireAdminPage();
+  const supabase = getServiceClient();
+
+  const { error } = await supabase
+    .from("event_settings")
+    .upsert({ id: 1, active_checkpoint: checkpoint, updated_at: new Date().toISOString() });
+
+  if (error) return { ok: false, error: "Failed to update checkpoint." };
 
   revalidatePath("/jury");
   revalidatePath("/admin/evaluations");

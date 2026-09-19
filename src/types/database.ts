@@ -127,6 +127,12 @@ export interface Evaluation {
   updated_at: string;
 }
 
+export interface EventSettings {
+  id: number;
+  active_checkpoint: 1 | 2 | 3;
+  updated_at: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -167,6 +173,11 @@ export interface Database {
         Row: Evaluation;
         Insert: Partial<Evaluation>;
         Update: Partial<Evaluation>;
+      };
+      event_settings: {
+        Row: EventSettings;
+        Insert: Partial<EventSettings>;
+        Update: Partial<EventSettings>;
       };
     };
   };

@@ -1,62 +1,80 @@
 import "server-only";
 import { getServiceClient } from "@/lib/db/server";
 
-interface EvalTeam {
+// ---------------------------------------------------------------------------
+// Checkpoint config
+// ---------------------------------------------------------------------------
+
+export type CheckpointNumber = 1 | 2 | 3;
+
+export const CHECKPOINT_CONFIG: Record<
+  CheckpointNumber,
+  { label: string; dbScoreCol: string; dbRemarksCol: string; maxScore: number }
+> = {
+  1: { label: "Checkpoint 1", dbScoreCol: "checkpoint_1", dbRemarksCol: "checkpoint_1_remarks", maxScore: 15 },
+  2: { label: "Checkpoint 2", dbScoreCol: "checkpoint_2", dbRemarksCol: "checkpoint_2_remarks", maxScore: 25 },
+  3: { label: "Final Evaluation", dbScoreCol: "final_score", dbRemarksCol: "final_remarks", maxScore: 60 },
+};
+
+// ---------------------------------------------------------------------------
+// Active checkpoint (event_settings singleton)
+// ---------------------------------------------------------------------------
+
+export async function getActiveCheckpoint(): Promise<CheckpointNumber> {
+  const supabase = getServiceClient();
+  const { data } = await supabase
+    .from("event_settings")
+    .select("active_checkpoint")
+    .eq("id", 1)
+    .maybeSingle();
+  return (data?.active_checkpoint as CheckpointNumber) ?? 1;
+}
+
+export async function setActiveCheckpoint(checkpoint: CheckpointNumber) {
+  const supabase = getServiceClient();
+  const { error } = await supabase
+    .from("event_settings")
+    .upsert({ id: 1, active_checkpoint: checkpoint, updated_at: new Date().toISOString() });
+  if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
+// Jury-facing: all teams with active checkpoint status
+// ---------------------------------------------------------------------------
+
+export interface JuryTeamRow {
   teamId: string;
   teamCode: string;
   teamName: string | null;
   benchLabel: string | null;
-  checkpoint1: number | null;
-  checkpoint2: number | null;
-  finalScore: number | null;
-  total: number;
-  isFinalized: boolean;
-  hasEvaluation: boolean;
+  /** Score for the active checkpoint only (null = not yet submitted) */
+  activeScore: number | null;
+  /** Whether this jury member already submitted for the active checkpoint */
+  isSubmitted: boolean;
+  /** Whether the team has at least 1 member checked in (present at event) */
+  isPresent: boolean;
+  /** Number of members checked in */
+  checkedInCount: number;
+  /** Total number of members in the team */
+  totalMembers: number;
 }
 
-export async function getTeamsForJury(juryId: string): Promise<EvalTeam[]> {
+export async function getAllTeamsForJury(
+  juryId: string,
+  activeCheckpoint: CheckpointNumber
+): Promise<JuryTeamRow[]> {
   const supabase = getServiceClient();
+  const config = CHECKPOINT_CONFIG[activeCheckpoint];
 
-  // First check direct jury_team_assignments
-  const { data: directAssignments } = (await supabase
-    .from("jury_team_assignments")
-    .select("team_id")
-    .eq("jury_id", juryId)) as { data: Array<{ team_id: string }> | null };
+  // Fetch ALL teams
+  const { data: teams } = (await supabase
+    .from("teams")
+    .select("id, team_code, team_name, bench_id")
+    .order("team_code")) as {
+    data: Array<{ id: string; team_code: string; team_name: string | null; bench_id: string | null }> | null;
+  };
 
-  let teams: Array<{ id: string; team_code: string; team_name: string | null; bench_id: string | null }> = [];
-
-  if (directAssignments && directAssignments.length > 0) {
-    const teamIds = directAssignments.map((a) => a.team_id);
-    const { data: assignedTeams } = (await supabase
-      .from("teams")
-      .select("id, team_code, team_name, bench_id")
-      .in("id", teamIds)
-      .order("team_code")) as {
-      data: Array<{ id: string; team_code: string; team_name: string | null; bench_id: string | null }> | null;
-    };
-    teams = assignedTeams ?? [];
-  } else {
-    // Fallback: Get jury member's room
-    const { data: jury } = await supabase
-      .from("jury_members")
-      .select("room_id")
-      .eq("id", juryId)
-      .maybeSingle();
-
-    if (!jury?.room_id) return [];
-
-    // Get all teams in that room
-    const { data: roomTeams } = (await supabase
-      .from("teams")
-      .select("id, team_code, team_name, bench_id")
-      .eq("room_id", jury.room_id)
-      .order("team_code")) as {
-      data: Array<{ id: string; team_code: string; team_name: string | null; bench_id: string | null }> | null;
-    };
-    teams = roomTeams ?? [];
-  }
-
-  if (!teams.length) return [];
+  if (!teams?.length) return [];
 
   // Get bench labels
   const benchIds = teams.map((t) => t.bench_id).filter(Boolean) as string[];
@@ -67,42 +85,92 @@ export async function getTeamsForJury(juryId: string): Promise<EvalTeam[]> {
     : { data: [] as Array<{ id: string; label: string }> };
   const benchMap = new Map((benches ?? []).map((b) => [b.id, b.label]));
 
-  // Get evaluations for this jury
+  // Get evaluations for this jury (only need the active checkpoint column)
   const teamIds = teams.map((t) => t.id);
   const { data: evals } = (await supabase
     .from("evaluations")
-    .select("team_id, checkpoint_1, checkpoint_2, final_score, is_finalized")
+    .select(`team_id, ${config.dbScoreCol}`)
     .eq("jury_id", juryId)
     .in("team_id", teamIds)) as {
-    data: Array<{
-      team_id: string;
-      checkpoint_1: number | null;
-      checkpoint_2: number | null;
-      final_score: number | null;
-      is_finalized: boolean;
-    }> | null;
+    data: Array<Record<string, unknown>> | null;
   };
-  const evalMap = new Map((evals ?? []).map((e) => [e.team_id, e]));
+  const evalMap = new Map(
+    (evals ?? []).map((e) => [e.team_id as string, e[config.dbScoreCol] as number | null])
+  );
+
+  // Get participant presence data (READ-ONLY — does not modify check-in data)
+  const { data: members } = (await supabase
+    .from("participants")
+    .select("team_id, entry_status")
+    .in("team_id", teamIds)
+    .eq("status", "active")) as {
+    data: Array<{ team_id: string; entry_status: string }> | null;
+  };
+  const presenceMap = new Map<string, { total: number; checkedIn: number }>();
+  for (const m of members ?? []) {
+    const entry = presenceMap.get(m.team_id) ?? { total: 0, checkedIn: 0 };
+    entry.total += 1;
+    if (m.entry_status === "checked_in") entry.checkedIn += 1;
+    presenceMap.set(m.team_id, entry);
+  }
 
   return teams.map((t) => {
-    const ev = evalMap.get(t.id);
-    const cp1 = ev?.checkpoint_1 ?? null;
-    const cp2 = ev?.checkpoint_2 ?? null;
-    const fs = ev?.final_score ?? null;
+    const score = evalMap.get(t.id) ?? null;
+    const presence = presenceMap.get(t.id) ?? { total: 0, checkedIn: 0 };
     return {
       teamId: t.id,
       teamCode: t.team_code,
       teamName: t.team_name,
       benchLabel: t.bench_id ? benchMap.get(t.bench_id) ?? null : null,
-      checkpoint1: cp1,
-      checkpoint2: cp2,
-      finalScore: fs,
-      total: (cp1 ?? 0) + (cp2 ?? 0) + (fs ?? 0),
-      isFinalized: ev?.is_finalized ?? false,
-      hasEvaluation: !!ev,
+      activeScore: score,
+      isSubmitted: score !== null,
+      isPresent: presence.checkedIn > 0,
+      checkedInCount: presence.checkedIn,
+      totalMembers: presence.total,
     };
   });
 }
+
+// ---------------------------------------------------------------------------
+// Jury-facing: get single evaluation (active checkpoint only)
+// ---------------------------------------------------------------------------
+
+export interface JuryEvalData {
+  score: number | null;
+  remarks: string | null;
+  isSubmitted: boolean;
+}
+
+export async function getJuryEvaluation(
+  teamId: string,
+  juryId: string,
+  activeCheckpoint: CheckpointNumber
+): Promise<JuryEvalData> {
+  const supabase = getServiceClient();
+  const config = CHECKPOINT_CONFIG[activeCheckpoint];
+
+  const { data } = (await supabase
+    .from("evaluations")
+    .select(`${config.dbScoreCol}, ${config.dbRemarksCol}`)
+    .eq("team_id", teamId)
+    .eq("jury_id", juryId)
+    .maybeSingle()) as { data: Record<string, unknown> | null };
+
+  if (!data) return { score: null, remarks: null, isSubmitted: false };
+
+  const score = data[config.dbScoreCol] as number | null;
+  const remarks = data[config.dbRemarksCol] as string | null;
+
+  return {
+    score,
+    remarks,
+    isSubmitted: score !== null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Legacy: full evaluation for a jury member (used by admin)
+// ---------------------------------------------------------------------------
 
 export async function getEvaluation(teamId: string, juryId: string) {
   const supabase = getServiceClient();
@@ -115,11 +183,18 @@ export async function getEvaluation(teamId: string, juryId: string) {
   return data;
 }
 
+// ---------------------------------------------------------------------------
+// Admin-facing: full leaderboard
+// ---------------------------------------------------------------------------
+
 interface EvalRow {
   teamCode: string;
   teamName: string | null;
   roomCode: string | null;
   juryName: string;
+  juryId: string;
+  teamId: string;
+  evalId: string;
   checkpoint1: number | null;
   checkpoint2: number | null;
   finalScore: number | null;
@@ -132,8 +207,9 @@ export async function getAllEvaluations(): Promise<EvalRow[]> {
 
   const { data: evals } = (await supabase
     .from("evaluations")
-    .select("team_id, jury_id, checkpoint_1, checkpoint_2, final_score, is_finalized")) as {
+    .select("id, team_id, jury_id, checkpoint_1, checkpoint_2, final_score, is_finalized")) as {
     data: Array<{
+      id: string;
       team_id: string;
       jury_id: string;
       checkpoint_1: number | null;
@@ -173,6 +249,9 @@ export async function getAllEvaluations(): Promise<EvalRow[]> {
   return evals.map((e) => {
     const team = teamMap.get(e.team_id);
     return {
+      evalId: e.id,
+      teamId: e.team_id,
+      juryId: e.jury_id,
       teamCode: team?.team_code ?? "—",
       teamName: team?.team_name ?? null,
       roomCode: team?.room_id ? roomMap.get(team.room_id) ?? null : null,

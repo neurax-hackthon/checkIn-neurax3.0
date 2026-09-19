@@ -31,6 +31,7 @@ export default async function AdminDashboardPage() {
         <KpiCard label="Pending" value={stats.pending} />
         <KpiCard label="Check-in Rate" value={stats.checkinRate} suffix="%" />
         <KpiCard label="Total Teams" value={stats.totalTeams} />
+        <KpiCard label="Teams Present" value={stats.teamsPresent} />
         <KpiCard label="Teams Complete" value={stats.teamsComplete} />
         <KpiCard label="Teams Partial" value={stats.teamsPartial} />
         <KpiCard label="Rooms In Use" value={stats.roomsInUse} />

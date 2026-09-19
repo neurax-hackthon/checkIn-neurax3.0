@@ -10,6 +10,7 @@ export interface AdminStats {
   totalTeams: number;
   teamsComplete: number;
   teamsPartial: number;
+  teamsPresent: number;
   roomsInUse: number;
 }
 
@@ -65,6 +66,7 @@ export async function getAdminStats(): Promise<AdminStats> {
     totalTeams: teams?.length ?? 0,
     teamsComplete,
     teamsPartial,
+    teamsPresent: teamsComplete + teamsPartial,
     roomsInUse: roomsInUse.size,
   };
 }

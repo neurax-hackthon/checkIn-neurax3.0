@@ -43,7 +43,7 @@ const STATUS_TONE = {
 } as const;
 
 type ThemeFilter = "ALL" | "ACS" | "AIA" | "ASC";
-type CheckinFilter = "ALL" | "PENDING_MEMBERS" | "COMPLETE" | "ZERO_CHECKIN";
+type CheckinFilter = "ALL" | "PRESENT" | "PENDING_MEMBERS" | "COMPLETE" | "ZERO_CHECKIN";
 
 export function TeamsFilterView({
   teams,
@@ -63,12 +63,14 @@ export function TeamsFilterView({
     let checkedInCandidates = 0;
     let teamsWithPending = 0;
     let teamsComplete = 0;
+    let teamsPresent = 0;
 
     for (const t of teams) {
       pendingCandidates += t.pendingCount;
       checkedInCandidates += t.checkedInCount;
       if (t.pendingCount > 0) teamsWithPending++;
       if (t.status === "complete") teamsComplete++;
+      if (t.checkedInCount > 0) teamsPresent++;
     }
 
     return {
@@ -78,6 +80,7 @@ export function TeamsFilterView({
       checkedInCandidates,
       teamsWithPending,
       teamsComplete,
+      teamsPresent,
     };
   }, [teams]);
 
@@ -88,6 +91,7 @@ export function TeamsFilterView({
       if (selectedTheme !== "ALL" && t.theme !== selectedTheme) return false;
 
       // Checkin filter
+      if (selectedCheckin === "PRESENT" && t.checkedInCount === 0) return false;
       if (selectedCheckin === "PENDING_MEMBERS" && t.pendingCount === 0) return false;
       if (selectedCheckin === "COMPLETE" && t.status !== "complete") return false;
       if (selectedCheckin === "ZERO_CHECKIN" && t.checkedInCount > 0) return false;
@@ -113,7 +117,11 @@ export function TeamsFilterView({
   return (
     <div className="space-y-5">
       {/* Live Venue Metrics Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="rounded-xl border border-success/30 bg-success-bg p-3 text-center">
+          <p className="text-2xl font-bold mono text-success">{metrics.teamsPresent}</p>
+          <p className="text-xs text-muted mt-0.5">Teams Present (≥1 in)</p>
+        </div>
         <div className="rounded-xl border border-border bg-surface p-3 text-center">
           <p className="text-2xl font-bold mono text-gold">{metrics.pendingCandidates}</p>
           <p className="text-xs text-muted mt-0.5">Pending Candidates</p>
@@ -124,7 +132,7 @@ export function TeamsFilterView({
         </div>
         <div className="rounded-xl border border-border bg-surface p-3 text-center">
           <p className="text-2xl font-bold mono text-warning">{metrics.teamsWithPending}</p>
-          <p className="text-xs text-muted mt-0.5">Teams with Missing Members</p>
+          <p className="text-xs text-muted mt-0.5">Teams with Missing</p>
         </div>
         <div className="rounded-xl border border-border bg-surface p-3 text-center">
           <p className="text-2xl font-bold mono text-foreground">{metrics.totalTeams}</p>
@@ -186,6 +194,7 @@ export function TeamsFilterView({
             <span className="text-xs text-muted font-medium mr-1">Check-in:</span>
             {[
               { key: "ALL", label: "All Status" },
+              { key: "PRESENT", label: "👥 Present (≥1 in)" },
               { key: "PENDING_MEMBERS", label: "⚠ Has Pending Members" },
               { key: "COMPLETE", label: "✓ Fully Checked In" },
               { key: "ZERO_CHECKIN", label: "0 Checked In" },
